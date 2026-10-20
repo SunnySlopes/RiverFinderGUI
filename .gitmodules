@@ -1,0 +1,4 @@
+[submodule "RiverFinderBase"]
+	path = RiverFinderBase
+	url = https://github.com/SunnySlopes/RiverFinder.git
+	branch = JNI

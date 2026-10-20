@@ -43,6 +43,7 @@ public class RiverFinderFrame extends JFrame {
     private static final double MIN_RIVER_RATIO_UI = MIN_RIVER_AREA_UI / RIVER_AREA_FULL * 100.0;
     private static final double DEFAULT_RIVER_RATIO_UI = DEFAULT_RIVER_AREA_UI / RIVER_AREA_FULL * 100.0;
     private static final double MAX_RIVER_RATIO_UI = MAX_RIVER_AREA_UI / RIVER_AREA_FULL * 100.0;
+    private static final int DEFAULT_BIOME_SAMPLE_Y = -64;
 
     // 单种子搜索相关组件
     private JLabel searchSeedLabel;
@@ -53,6 +54,7 @@ public class RiverFinderFrame extends JFrame {
     private JLabel searchMaxXLabel;
     private JLabel searchMinZLabel;
     private JLabel searchMaxZLabel;
+    private JLabel searchBiomeYLabel;
     private JLabel searchLanguageLabel;
     private JTextField searchSeedField;
     private JTextField searchThreadCountField;
@@ -62,6 +64,11 @@ public class RiverFinderFrame extends JFrame {
     private JTextField maxXField;
     private JTextField minZField;
     private JTextField maxZField;
+    private JCheckBox squareSideCheckBox;
+    private JTextField squareSideField;
+    private boolean squareSideUpdating = false;
+    private JTextField searchBiomeYField;
+    private JCheckBox searchCalcCaveCheckBox;
     private JComboBox<String> languageComboBox;
     private boolean searchRiverParamUpdating = false;
     private JButton searchStartButton;
@@ -106,6 +113,7 @@ public class RiverFinderFrame extends JFrame {
     private JLabel listSearchMaxXLabel;
     private JLabel listSearchMinZLabel;
     private JLabel listSearchMaxZLabel;
+    private JLabel listSearchBiomeYLabel;
     private File selectedSeedFile;
     private JTextField listSearchThreadCountField;
     private JTextField listMinRiverAreaField;
@@ -114,6 +122,11 @@ public class RiverFinderFrame extends JFrame {
     private JTextField listMaxXField;
     private JTextField listMinZField;
     private JTextField listMaxZField;
+    private JCheckBox listSquareSideCheckBox;
+    private JTextField listSquareSideField;
+    private boolean listSquareSideUpdating = false;
+    private JTextField listBiomeYField;
+    private JCheckBox listCalcCaveCheckBox;
     private boolean listRiverParamUpdating = false;
     private JButton listSearchStartButton;
     private JButton listSearchPauseButton;
@@ -392,9 +405,76 @@ public class RiverFinderFrame extends JFrame {
         });
         inputPanel.add(maxZField, gbc);
 
-        // 语言选择下拉框
+        // 正方形区域边长（勾选后按中心 0,0 填入 min/max）
         gbc.gridx = 0;
         gbc.gridy = 8;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        squareSideCheckBox = new JCheckBox(getString("label.squareSide"));
+        squareSideCheckBox.setFont(getLoadedFont());
+        inputPanel.add(squareSideCheckBox, gbc);
+        gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        long defaultSide = (long) DEFAULT_MAX_X - DEFAULT_MIN_X + 1;
+        squareSideField = new JTextField(String.valueOf(defaultSide), 20);
+        squareSideCheckBox.setSelected(true);
+        squareSideCheckBox.addActionListener(e -> onSquareSideModeToggled());
+        squareSideField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                applySquareSideToBounds();
+            }
+
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                applySquareSideToBounds();
+            }
+
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                applySquareSideToBounds();
+            }
+        });
+        squareSideField.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusLost(java.awt.event.FocusEvent e) {
+                validateIntegerInput(squareSideField, getString("label.squareSide").replace(":", ""));
+            }
+        });
+        inputPanel.add(squareSideField, gbc);
+        applyBoundFieldEnableState(true);
+        applySquareSideToBounds();
+
+        // 群系取样高度
+        gbc.gridx = 0;
+        gbc.gridy = 9;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        searchBiomeYLabel = new JLabel(getString("label.biomeSampleY"));
+        searchBiomeYLabel.setFont(getLoadedFont());
+        inputPanel.add(searchBiomeYLabel, gbc);
+        gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        searchBiomeYField = new JTextField(String.valueOf(DEFAULT_BIOME_SAMPLE_Y), 20);
+        searchBiomeYField.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusLost(java.awt.event.FocusEvent e) {
+                validateIntegerInput(searchBiomeYField, getString("label.biomeSampleY").replace(":", ""));
+            }
+        });
+        inputPanel.add(searchBiomeYField, gbc);
+
+        // 是否计算溶洞面积
+        gbc.gridx = 0;
+        gbc.gridy = 10;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        gbc.gridwidth = 2;
+        searchCalcCaveCheckBox = new JCheckBox(getString("label.calcCaveArea"), true);
+        searchCalcCaveCheckBox.setFont(getLoadedFont());
+        inputPanel.add(searchCalcCaveCheckBox, gbc);
+        gbc.gridwidth = 1;
+
+        // 语言选择下拉框
+        gbc.gridx = 0;
+        gbc.gridy = 11;
         gbc.fill = GridBagConstraints.NONE;
         gbc.weightx = 0;
         searchLanguageLabel = new JLabel(getString("label.language"));
@@ -629,10 +709,9 @@ public class RiverFinderFrame extends JFrame {
                 searchThreadCountField.setEnabled(true);
                 searchMinRiverAreaField.setEnabled(true);
                 searchMinRiverRatioField.setEnabled(true);
-                minXField.setEnabled(true);
-                maxXField.setEnabled(true);
-                minZField.setEnabled(true);
-                maxZField.setEnabled(true);
+                applyBoundFieldEnableState(true);
+                if (searchBiomeYField != null) searchBiomeYField.setEnabled(true);
+                if (searchCalcCaveCheckBox != null) searchCalcCaveCheckBox.setEnabled(true);
                 if (languageComboBox != null) {
                     languageComboBox.setEnabled(true);
                 }
@@ -994,6 +1073,16 @@ public class RiverFinderFrame extends JFrame {
                 }
             }
 
+            int biomeY;
+            try {
+                biomeY = Integer.parseInt(searchBiomeYField.getText().trim());
+            } catch (NumberFormatException e) {
+                JOptionPane.showMessageDialog(this, getString("error.biomeYMustBeInteger"), getString("prompt.error"), JOptionPane.ERROR_MESSAGE);
+                searchBiomeYField.setText(String.valueOf(DEFAULT_BIOME_SAMPLE_Y));
+                return;
+            }
+            float caveFactor = searchCalcCaveCheckBox.isSelected() ? 1.0f : 0.0f;
+
             lastSearchSeed = seed;
             lastSearchMinX = minX;
             lastSearchMaxX = maxX;
@@ -1013,10 +1102,9 @@ public class RiverFinderFrame extends JFrame {
             searchThreadCountField.setEnabled(false);
             searchMinRiverAreaField.setEnabled(false);
             searchMinRiverRatioField.setEnabled(false);
-            minXField.setEnabled(false);
-            maxXField.setEnabled(false);
-            minZField.setEnabled(false);
-            maxZField.setEnabled(false);
+            applyBoundFieldEnableState(false);
+            if (searchBiomeYField != null) searchBiomeYField.setEnabled(false);
+            if (searchCalcCaveCheckBox != null) searchCalcCaveCheckBox.setEnabled(false);
             if (languageComboBox != null) languageComboBox.setEnabled(false);
             final long resultToken = singleSearchResultToken.incrementAndGet();
             searchResultArea.setText("");
@@ -1027,7 +1115,7 @@ public class RiverFinderFrame extends JFrame {
             searchRemainingTimeLabel.setText(getString("remainingTime.calculating"));
 
             riverRunner = new RiverSearchRunner();
-            riverRunner.startRiverSearch(seed, minX, maxX, minZ, maxZ, minArea, threadCount,
+            riverRunner.startRiverSearch(seed, minX, maxX, minZ, maxZ, minArea, threadCount, biomeY, caveFactor,
                 info -> updateRiverSearchProgress(resultToken, info),
                 line -> addSearchResult(resultToken, line));
 
@@ -1065,10 +1153,170 @@ public class RiverFinderFrame extends JFrame {
     }
 
     private void resetSearchToDefaults() {
-        minXField.setText(String.valueOf(DEFAULT_MIN_X));
-        maxXField.setText(String.valueOf(DEFAULT_MAX_X));
-        minZField.setText(String.valueOf(DEFAULT_MIN_Z));
-        maxZField.setText(String.valueOf(DEFAULT_MAX_Z));
+        applySearchBounds(DEFAULT_MIN_X, DEFAULT_MAX_X, DEFAULT_MIN_Z, DEFAULT_MAX_Z);
+    }
+
+    private void applySearchBounds(int minX, int maxX, int minZ, int maxZ) {
+        long side = (long) maxX - minX + 1;
+        if (squareSideCheckBox != null) {
+            squareSideCheckBox.setSelected(true);
+        }
+        if (squareSideField != null) {
+            squareSideUpdating = true;
+            squareSideField.setText(String.valueOf(side));
+            squareSideUpdating = false;
+        }
+        minXField.setText(String.valueOf(minX));
+        maxXField.setText(String.valueOf(maxX));
+        minZField.setText(String.valueOf(minZ));
+        maxZField.setText(String.valueOf(maxZ));
+        applyBoundFieldEnableState(!isSearchRunning);
+        applySquareSideToBounds();
+    }
+
+    private void onSquareSideModeToggled() {
+        applyBoundFieldEnableState(!isSearchRunning);
+        if (squareSideCheckBox != null && squareSideCheckBox.isSelected()) {
+            applySquareSideToBounds();
+        }
+    }
+
+    private void applyBoundFieldEnableState(boolean allowEdit) {
+        boolean squareMode = squareSideCheckBox != null && squareSideCheckBox.isSelected();
+        if (squareSideCheckBox != null) {
+            squareSideCheckBox.setEnabled(allowEdit);
+        }
+        if (squareSideField != null) {
+            squareSideField.setEnabled(allowEdit && squareMode);
+        }
+        boolean boundsEditable = allowEdit && !squareMode;
+        if (minXField != null) {
+            minXField.setEnabled(boundsEditable);
+        }
+        if (maxXField != null) {
+            maxXField.setEnabled(boundsEditable);
+        }
+        if (minZField != null) {
+            minZField.setEnabled(boundsEditable);
+        }
+        if (maxZField != null) {
+            maxZField.setEnabled(boundsEditable);
+        }
+    }
+
+    /** Fill min/max from square side length centered at (0, 0). Side = max - min + 1. */
+    private void applySquareSideToBounds() {
+        if (squareSideUpdating || squareSideCheckBox == null || !squareSideCheckBox.isSelected()) {
+            return;
+        }
+        if (squareSideField == null || minXField == null) {
+            return;
+        }
+        String text = squareSideField.getText().trim();
+        if (text.isEmpty()) {
+            return;
+        }
+        try {
+            long side = Long.parseLong(text);
+            if (side < 1) {
+                return;
+            }
+            long min = -side / 2;
+            long max = min + side - 1;
+            if (min < Integer.MIN_VALUE || max > Integer.MAX_VALUE) {
+                return;
+            }
+            squareSideUpdating = true;
+            minXField.setText(String.valueOf((int) min));
+            maxXField.setText(String.valueOf((int) max));
+            minZField.setText(String.valueOf((int) min));
+            maxZField.setText(String.valueOf((int) max));
+            squareSideUpdating = false;
+            checkSearchParameterChange();
+        } catch (NumberFormatException ignored) {
+            // wait until the field holds a valid integer
+        }
+    }
+
+    private void onListSquareSideModeToggled() {
+        applyListBoundFieldEnableState(!isListSearchRunning);
+        if (listSquareSideCheckBox != null && listSquareSideCheckBox.isSelected()) {
+            applyListSquareSideToBounds();
+        }
+    }
+
+    private void applyListBoundFieldEnableState(boolean allowEdit) {
+        boolean squareMode = listSquareSideCheckBox != null && listSquareSideCheckBox.isSelected();
+        if (listSquareSideCheckBox != null) {
+            listSquareSideCheckBox.setEnabled(allowEdit);
+        }
+        if (listSquareSideField != null) {
+            listSquareSideField.setEnabled(allowEdit && squareMode);
+        }
+        boolean boundsEditable = allowEdit && !squareMode;
+        if (listMinXField != null) {
+            listMinXField.setEnabled(boundsEditable);
+        }
+        if (listMaxXField != null) {
+            listMaxXField.setEnabled(boundsEditable);
+        }
+        if (listMinZField != null) {
+            listMinZField.setEnabled(boundsEditable);
+        }
+        if (listMaxZField != null) {
+            listMaxZField.setEnabled(boundsEditable);
+        }
+    }
+
+    private void applyListSquareSideToBounds() {
+        if (listSquareSideUpdating || listSquareSideCheckBox == null || !listSquareSideCheckBox.isSelected()) {
+            return;
+        }
+        if (listSquareSideField == null || listMinXField == null) {
+            return;
+        }
+        String text = listSquareSideField.getText().trim();
+        if (text.isEmpty()) {
+            return;
+        }
+        try {
+            long side = Long.parseLong(text);
+            if (side < 1) {
+                return;
+            }
+            long min = -side / 2;
+            long max = min + side - 1;
+            if (min < Integer.MIN_VALUE || max > Integer.MAX_VALUE) {
+                return;
+            }
+            listSquareSideUpdating = true;
+            listMinXField.setText(String.valueOf((int) min));
+            listMaxXField.setText(String.valueOf((int) max));
+            listMinZField.setText(String.valueOf((int) min));
+            listMaxZField.setText(String.valueOf((int) max));
+            listSquareSideUpdating = false;
+            checkListSearchParameterChange();
+        } catch (NumberFormatException ignored) {
+            // wait until the field holds a valid integer
+        }
+    }
+
+    private void applyListSearchBounds(int minX, int maxX, int minZ, int maxZ) {
+        long side = (long) maxX - minX + 1;
+        if (listSquareSideCheckBox != null) {
+            listSquareSideCheckBox.setSelected(true);
+        }
+        if (listSquareSideField != null) {
+            listSquareSideUpdating = true;
+            listSquareSideField.setText(String.valueOf(side));
+            listSquareSideUpdating = false;
+        }
+        listMinXField.setText(String.valueOf(minX));
+        listMaxXField.setText(String.valueOf(maxX));
+        listMinZField.setText(String.valueOf(minZ));
+        listMaxZField.setText(String.valueOf(maxZ));
+        applyListBoundFieldEnableState(!isListSearchRunning);
+        applyListSquareSideToBounds();
     }
 
     // 创建从种子列表搜索面板
@@ -1236,6 +1484,73 @@ public class RiverFinderFrame extends JFrame {
         });
         inputPanel.add(listMaxZField, gbc);
 
+        // 正方形区域边长（勾选后按中心 0,0 填入 min/max）
+        gbc.gridx = 0;
+        gbc.gridy = 8;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        listSquareSideCheckBox = new JCheckBox(getString("label.squareSide"));
+        listSquareSideCheckBox.setFont(getLoadedFont());
+        inputPanel.add(listSquareSideCheckBox, gbc);
+        gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        long listDefaultSide = (long) DEFAULT_LIST_MAX_X - DEFAULT_LIST_MIN_X + 1;
+        listSquareSideField = new JTextField(String.valueOf(listDefaultSide), 20);
+        listSquareSideCheckBox.setSelected(true);
+        listSquareSideCheckBox.addActionListener(e -> onListSquareSideModeToggled());
+        listSquareSideField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                applyListSquareSideToBounds();
+            }
+
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                applyListSquareSideToBounds();
+            }
+
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                applyListSquareSideToBounds();
+            }
+        });
+        listSquareSideField.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusLost(java.awt.event.FocusEvent e) {
+                validateIntegerInput(listSquareSideField, getString("label.squareSide").replace(":", ""));
+            }
+        });
+        inputPanel.add(listSquareSideField, gbc);
+        applyListBoundFieldEnableState(true);
+        applyListSquareSideToBounds();
+
+        // 群系取样高度
+        gbc.gridx = 0;
+        gbc.gridy = 9;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        listSearchBiomeYLabel = new JLabel(getString("label.biomeSampleY"));
+        listSearchBiomeYLabel.setFont(getLoadedFont());
+        inputPanel.add(listSearchBiomeYLabel, gbc);
+        gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        listBiomeYField = new JTextField(String.valueOf(DEFAULT_BIOME_SAMPLE_Y), 20);
+        listBiomeYField.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusLost(java.awt.event.FocusEvent e) {
+                validateIntegerInput(listBiomeYField, getString("label.biomeSampleY").replace(":", ""));
+            }
+        });
+        inputPanel.add(listBiomeYField, gbc);
+
+        // 是否计算溶洞面积
+        gbc.gridx = 0;
+        gbc.gridy = 10;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        gbc.gridwidth = 2;
+        listCalcCaveCheckBox = new JCheckBox(getString("label.calcCaveArea"), true);
+        listCalcCaveCheckBox.setFont(getLoadedFont());
+        inputPanel.add(listCalcCaveCheckBox, gbc);
+        gbc.gridwidth = 1;
+
         // 列表 Tab 内面积↔占比：仅 focusLost 时联动，避免输入时被覆盖
 
         // 按钮区域
@@ -1402,10 +1717,9 @@ public class RiverFinderFrame extends JFrame {
         searchThreadCountField.setEnabled(true);
         searchMinRiverAreaField.setEnabled(true);
         searchMinRiverRatioField.setEnabled(true);
-        minXField.setEnabled(true);
-        maxXField.setEnabled(true);
-        minZField.setEnabled(true);
-        maxZField.setEnabled(true);
+        applyBoundFieldEnableState(true);
+        if (searchBiomeYField != null) searchBiomeYField.setEnabled(true);
+        if (searchCalcCaveCheckBox != null) searchCalcCaveCheckBox.setEnabled(true);
         if (languageComboBox != null) languageComboBox.setEnabled(true);
     }
 
@@ -1651,6 +1965,15 @@ public class RiverFinderFrame extends JFrame {
         if (searchMaxZLabel != null) {
             searchMaxZLabel.setText(getString("label.maxZ"));
         }
+        if (squareSideCheckBox != null) {
+            squareSideCheckBox.setText(getString("label.squareSide"));
+        }
+        if (searchBiomeYLabel != null) {
+            searchBiomeYLabel.setText(getString("label.biomeSampleY"));
+        }
+        if (searchCalcCaveCheckBox != null) {
+            searchCalcCaveCheckBox.setText(getString("label.calcCaveArea"));
+        }
         if (searchLanguageLabel != null) {
             searchLanguageLabel.setText(getString("label.language"));
         }
@@ -1718,8 +2041,17 @@ public class RiverFinderFrame extends JFrame {
         if (listSearchMinZLabel != null) {
             listSearchMinZLabel.setText(getString("label.minZ"));
         }
-        if (listSearchMaxZLabel != null) {
+            if (listSearchMaxZLabel != null) {
             listSearchMaxZLabel.setText(getString("label.maxZ"));
+        }
+        if (listSquareSideCheckBox != null) {
+            listSquareSideCheckBox.setText(getString("label.squareSide"));
+        }
+        if (listSearchBiomeYLabel != null) {
+            listSearchBiomeYLabel.setText(getString("label.biomeSampleY"));
+        }
+        if (listCalcCaveCheckBox != null) {
+            listCalcCaveCheckBox.setText(getString("label.calcCaveArea"));
         }
         if (listSearchMinRiverAreaLabel != null) {
             listSearchMinRiverAreaLabel.setText(getString("label.minRiverArea"));
@@ -1909,10 +2241,9 @@ public class RiverFinderFrame extends JFrame {
                 listSearchThreadCountField.setEnabled(true);
                 listMinRiverAreaField.setEnabled(true);
                 listMinRiverRatioField.setEnabled(true);
-                listMinXField.setEnabled(true);
-                listMaxXField.setEnabled(true);
-                listMinZField.setEnabled(true);
-                listMaxZField.setEnabled(true);
+                applyListBoundFieldEnableState(true);
+                if (listBiomeYField != null) listBiomeYField.setEnabled(true);
+                if (listCalcCaveCheckBox != null) listCalcCaveCheckBox.setEnabled(true);
                 listSearchResultToken.incrementAndGet();
                 listSearchResultArea.setText("");
                 listSearchProgressBar.setValue(0);
@@ -2137,6 +2468,17 @@ public class RiverFinderFrame extends JFrame {
                 return;
             }
 
+            int biomeY;
+            try {
+                biomeY = Integer.parseInt(listBiomeYField.getText().trim());
+            } catch (NumberFormatException e) {
+                JOptionPane.showMessageDialog(this, getString("error.biomeYMustBeInteger"), getString("prompt.error"), JOptionPane.ERROR_MESSAGE);
+                listBiomeYField.setText(String.valueOf(DEFAULT_BIOME_SAMPLE_Y));
+                return;
+            }
+            final float caveFactor = listCalcCaveCheckBox.isSelected() ? 1.0f : 0.0f;
+            final int finalBiomeY = biomeY;
+
             lastListSearchMinX = minX;
             lastListSearchMaxX = maxX;
             lastListSearchMinZ = minZ;
@@ -2155,10 +2497,9 @@ public class RiverFinderFrame extends JFrame {
             listSearchThreadCountField.setEnabled(false);
             listMinRiverAreaField.setEnabled(false);
             listMinRiverRatioField.setEnabled(false);
-            listMinXField.setEnabled(false);
-            listMaxXField.setEnabled(false);
-            listMinZField.setEnabled(false);
-            listMaxZField.setEnabled(false);
+            applyListBoundFieldEnableState(false);
+            if (listBiomeYField != null) listBiomeYField.setEnabled(false);
+            if (listCalcCaveCheckBox != null) listCalcCaveCheckBox.setEnabled(false);
             final long listResultToken = listSearchResultToken.incrementAndGet();
             listSearchResultArea.setText("");
             listSearchProgressBar.setMaximum((int) seeds.size());
@@ -2296,7 +2637,8 @@ public class RiverFinderFrame extends JFrame {
                         });
                     };
 
-                    listRiverRunner.runRiverSearchBlocking(seed, minX, maxX, minZ, maxZ, finalMinArea, finalThreadCount, seedProgressCallback, seedResultCallback);
+                    listRiverRunner.runRiverSearchBlocking(seed, minX, maxX, minZ, maxZ, finalMinArea, finalThreadCount,
+                        finalBiomeY, caveFactor, seedProgressCallback, seedResultCallback);
 
                     while (listRiverRunner.isRunning() && isListSearchRunning) {
                         while (isListSearchPaused && isListSearchRunning) {
@@ -2375,10 +2717,9 @@ public class RiverFinderFrame extends JFrame {
                     listSearchThreadCountField.setEnabled(true);
                     listMinRiverAreaField.setEnabled(true);
                     listMinRiverRatioField.setEnabled(true);
-                    listMinXField.setEnabled(true);
-                    listMaxXField.setEnabled(true);
-                    listMinZField.setEnabled(true);
-                    listMaxZField.setEnabled(true);
+                    applyListBoundFieldEnableState(true);
+                    if (listBiomeYField != null) listBiomeYField.setEnabled(true);
+                    if (listCalcCaveCheckBox != null) listCalcCaveCheckBox.setEnabled(true);
                     listSearchProgressBar.setValue((int) totalSeeds);
                     listSearchProgressBar.setString(getString("progress.seedsDone", totalSeeds, totalSeeds));
                     listSearchCurrentSeedProgressLabel.setText(getString("currentSeed.complete"));
@@ -2422,17 +2763,13 @@ public class RiverFinderFrame extends JFrame {
         listSearchThreadCountField.setEnabled(true);
         listMinRiverAreaField.setEnabled(true);
         listMinRiverRatioField.setEnabled(true);
-        listMinXField.setEnabled(true);
-        listMaxXField.setEnabled(true);
-        listMinZField.setEnabled(true);
-        listMaxZField.setEnabled(true);
+        applyListBoundFieldEnableState(true);
+        if (listBiomeYField != null) listBiomeYField.setEnabled(true);
+        if (listCalcCaveCheckBox != null) listCalcCaveCheckBox.setEnabled(true);
     }
 
     private void resetListSearchToDefaults() {
-        listMinXField.setText(String.valueOf(DEFAULT_LIST_MIN_X));
-        listMaxXField.setText(String.valueOf(DEFAULT_LIST_MAX_X));
-        listMinZField.setText(String.valueOf(DEFAULT_LIST_MIN_Z));
-        listMaxZField.setText(String.valueOf(DEFAULT_LIST_MAX_Z));
+        applyListSearchBounds(DEFAULT_LIST_MIN_X, DEFAULT_LIST_MAX_X, DEFAULT_LIST_MIN_Z, DEFAULT_LIST_MAX_Z);
     }
 
     // 解析结果文本，返回种子与河流结果行（x z area ratio%）的映射

@@ -7,28 +7,34 @@ plugins {
     id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 group 'org.example'
-version '1.0.0'
+version '1.1.0'
 repositories {
     mavenCentral()
     gradlePluginPortal()
     maven {
         url "https://maven.seedfinding.com"
-        }
-
+    }
     maven {
         url "https://maven.latticg.com"
-        }
-
+    }
     maven {
-
         url "https://jitpack.io"
-
-        }
-    maven {url "https://repo.jellejurre.dev"}
-
+    }
+    maven { url "https://repo.jellejurre.dev" }
 }
 dependencies {
+    // Native artifacts produced by :riverfinder CMake build
 }
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
 test {
     useJUnitPlatform()
 }
@@ -40,10 +46,43 @@ shadowJar {
     mergeServiceFiles()
 }
 
-// 创建 RiverFinder 的可执行 JAR
+def generatedNativeResourcesDir = layout.buildDirectory.dir('generated/native-resources')
+
+tasks.register('prepareNativeResources') {
+    group = 'build'
+    description = 'Builds :riverfinder (RiverFinderBase submodule) and packs Windows dll into jar resources'
+    dependsOn ':riverfinder:copyNativeArtifacts'
+    outputs.dir(generatedNativeResourcesDir)
+    doLast {
+        def outDir = generatedNativeResourcesDir.get().asFile
+        delete(outDir)
+        outDir.mkdirs()
+
+        def nativeDir = project(':riverfinder').layout.buildDirectory.dir('native').get().asFile
+        if (!nativeDir.exists()) {
+            logger.warn('No native artifacts from :riverfinder; jar will not contain bundled natives.')
+            return
+        }
+
+        // Windows-only packaging (MSYS2 build); skip linux/macos natives
+        copy {
+            from(nativeDir)
+            include('*.dll')
+            into(new File(outDir, 'native/windows'))
+        }
+    }
+}
+
+tasks.named('processResources') {
+    dependsOn tasks.named('prepareNativeResources')
+    from(generatedNativeResourcesDir)
+}
+
+// 创建 RiverFinder 的可执行 JAR（含原生库）
 tasks.register('buildMainJar', ShadowJar) {
     group = 'build'
-    description = 'Creates a fat JAR for RiverFinder'
+    description = 'Creates a fat JAR for RiverFinder (includes native libs from :riverfinder)'
+    dependsOn prepareNativeResources
     archiveBaseName.set('RiverFinder')
     archiveClassifier.set('')
     from sourceSets.main.output
@@ -58,70 +97,21 @@ tasks.register('buildMainJar', ShadowJar) {
         paths = ['META-INF/spring.handlers', 'META-INF/spring.schemas']
         mergeStrategy = "append"
     }
-    // 注意：不要排除 META-INF/versions/**，因为 Multi-Release JAR 需要这些文件
     exclude 'module-info.class'
 }
 
-// 创建所有 JAR 的任务
 tasks.register('buildAllJars') {
     group = 'build'
     description = 'Builds all executable JARs'
     dependsOn buildMainJar
 }
 
-// Native library build (requires CMake and JDK with JNI headers)
-// Output: native/riverfinder/build/riverfinder.dll (Windows) or libriverfinder.so (Linux)
-tasks.register('cmakeConfigure', Exec) {
+tasks.register('buildNative') {
     group = 'build'
-    description = 'Configures CMake for riverfinder native library'
-    workingDir file('native/riverfinder')
-    commandLine 'cmake', '-B', 'build', '-S', '.'
-}
-tasks.register('buildNative', Exec) {
-    dependsOn cmakeConfigure
-    group = 'build'
-    description = 'Builds riverfinder native library'
-    workingDir file('native/riverfinder/build')
-    commandLine 'cmake', '--build', '.', '--target', 'riverfinder'
+    description = 'Builds riverfinder native library via subproject'
+    dependsOn ':riverfinder:copyNativeArtifacts'
 }
 
-// Package native libraries into jar resources:
-// build/generated/native-resources/native/{windows|linux|macos}/<lib>
-def generatedNativeResourcesDir = layout.buildDirectory.dir('generated/native-resources')
-tasks.register('prepareNativeResources') {
-    group = 'build'
-    description = 'Collects dll/so/dylib files into jar resources'
-    outputs.dir(generatedNativeResourcesDir)
-    doLast {
-        def outDir = generatedNativeResourcesDir.get().asFile
-        delete(outDir)
-        outDir.mkdirs()
-
-        def nativeRoot = file('native')
-        if (!nativeRoot.exists()) {
-            logger.lifecycle('No native directory found, skip native resource packaging.')
-            return
-        }
-
-        copy {
-            from(nativeRoot)
-            include('**/*.dll')
-            into(new File(outDir, 'native/windows'))
-        }
-        copy {
-            from(nativeRoot)
-            include('**/*.so')
-            into(new File(outDir, 'native/linux'))
-        }
-        copy {
-            from(nativeRoot)
-            include('**/*.dylib')
-            into(new File(outDir, 'native/macos'))
-        }
-    }
-}
-
-tasks.named('processResources') {
-    dependsOn tasks.named('prepareNativeResources')
-    from(generatedNativeResourcesDir)
+tasks.named('build') {
+    dependsOn buildMainJar
 }

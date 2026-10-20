@@ -36,27 +36,39 @@ public class RiverSearchRunner {
 
     private static final long PROGRESS_POLL_MS = 100L;
 
-    /** Deduplicate identical (x,z), then keep one point with maximum area per OUTPUT_REGION_SIZE square. */
-    static List<int[]> filterResultsForOutput(int[] raw) {
-        if (raw == null || raw.length < 3) {
+    /** Result stride: x, z, riverArea, caveArea. */
+    public static final int RESULT_STRIDE = 4;
+
+    static int combinedScore(int riverArea, int caveArea, float caveFactor) {
+        return riverArea + Math.round(caveArea * caveFactor);
+    }
+
+    /**
+     * Deduplicate identical (x,z), then keep one point with maximum combined score per OUTPUT_REGION_SIZE square.
+     * Each entry: [x, z, riverArea, caveArea].
+     */
+    static List<int[]> filterResultsForOutput(int[] raw, float caveFactor) {
+        if (raw == null || raw.length < RESULT_STRIDE) {
             return List.of();
         }
         Map<Long, int[]> byXZ = new HashMap<>();
-        for (int i = 0; i + 2 < raw.length; i += 3) {
-            int x = raw[i], z = raw[i + 1], area = raw[i + 2];
+        for (int i = 0; i + RESULT_STRIDE - 1 < raw.length; i += RESULT_STRIDE) {
+            int x = raw[i], z = raw[i + 1], river = raw[i + 2], cave = raw[i + 3];
             long pk = packXZ(x, z);
-            int[] triple = { x, z, area };
-            byXZ.merge(pk, triple, (a, b) -> a[2] >= b[2] ? a : b);
+            int[] quad = { x, z, river, cave };
+            byXZ.merge(pk, quad, (a, b) ->
+                combinedScore(a[2], a[3], caveFactor) >= combinedScore(b[2], b[3], caveFactor) ? a : b);
         }
         Map<Long, int[]> byCell = new HashMap<>();
         for (int[] h : byXZ.values()) {
             int bx = Math.floorDiv(h[0], OUTPUT_REGION_SIZE);
             int bz = Math.floorDiv(h[1], OUTPUT_REGION_SIZE);
             long ck = packXZ(bx, bz);
-            byCell.merge(ck, h, (a, b) -> a[2] >= b[2] ? a : b);
+            byCell.merge(ck, h, (a, b) ->
+                combinedScore(a[2], a[3], caveFactor) >= combinedScore(b[2], b[3], caveFactor) ? a : b);
         }
         List<int[]> out = new ArrayList<>(byCell.values());
-        out.sort(Comparator.comparingInt((int[] t) -> t[2]).reversed());
+        out.sort(Comparator.comparingInt((int[] t) -> combinedScore(t[2], t[3], caveFactor)).reversed());
         return out;
     }
 
@@ -173,9 +185,11 @@ public class RiverSearchRunner {
 
     /** Start river search for one seed. Runs in background thread. */
     public void startRiverSearch(long seed, int minX, int maxX, int minZ, int maxZ, int minArea,
-                                 int threadCount, Consumer<ProgressInfo> progressCallback, Consumer<String> resultCallback) {
+                                 int threadCount, int biomeY, float caveFactor,
+                                 Consumer<ProgressInfo> progressCallback, Consumer<String> resultCallback) {
         if (isRunning) return;
-        Thread t = new Thread(() -> runRiverSearch(seed, minX, maxX, minZ, maxZ, minArea, threadCount, progressCallback, resultCallback),
+        Thread t = new Thread(() -> runRiverSearch(seed, minX, maxX, minZ, maxZ, minArea, threadCount,
+            biomeY, caveFactor, progressCallback, resultCallback),
             "riverfinder-search");
         t.setDaemon(true);
         t.start();
@@ -183,13 +197,16 @@ public class RiverSearchRunner {
 
     /** Run river search for one seed on the current thread (for list search). */
     public void runRiverSearchBlocking(long seed, int minX, int maxX, int minZ, int maxZ, int minArea,
-                                       int threadCount, Consumer<ProgressInfo> progressCallback, Consumer<String> resultCallback) {
+                                       int threadCount, int biomeY, float caveFactor,
+                                       Consumer<ProgressInfo> progressCallback, Consumer<String> resultCallback) {
         if (isRunning) return;
-        runRiverSearch(seed, minX, maxX, minZ, maxZ, minArea, threadCount, progressCallback, resultCallback);
+        runRiverSearch(seed, minX, maxX, minZ, maxZ, minArea, threadCount, biomeY, caveFactor,
+            progressCallback, resultCallback);
     }
 
     private void runRiverSearch(long seed, int minX, int maxX, int minZ, int maxZ, int minArea,
-                               int threadCount, Consumer<ProgressInfo> progressCallback, Consumer<String> resultCallback) {
+                               int threadCount, int biomeY, float caveFactor,
+                               Consumer<ProgressInfo> progressCallback, Consumer<String> resultCallback) {
         isRunning = true;
         isPaused = false;
         totalPausedMs = 0;
@@ -269,7 +286,6 @@ public class RiverSearchRunner {
                         total = (long) p1 + Math.max(tot, 1);
                     }
                 } else {
-                    // phase -1 (winding down) or unknown: show native counters if meaningful
                     processed = cur;
                     total = Math.max(tot, 1L);
                 }
@@ -289,16 +305,17 @@ public class RiverSearchRunner {
         }, 0, PROGRESS_POLL_MS, TimeUnit.MILLISECONDS);
 
         try {
-            int[] raw = RiverFinderBridge.riverSearch(seed, startX, startZ, width, height, -60, minArea,
-                DEFAULT_PRESERVE_RANGE, threads);
+            int[] raw = RiverFinderBridge.riverSearch(seed, startX, startZ, width, height, biomeY, minArea,
+                DEFAULT_PRESERVE_RANGE, threads, caveFactor);
 
             if (raw != null && resultCallback != null) {
                 int fullAreaInt = (int) RIVER_AREA_FULL;
                 StringBuilder sb = new StringBuilder();
-                for (int[] triple : filterResultsForOutput(raw)) {
-                    int x = triple[0], z = triple[1], area = triple[2];
-                    double ratioPercent = area / RIVER_AREA_FULL * 100.0;
-                    sb.append(String.format("/tp %d 64 %d s=%d/%d = %.2f%%", x, z, area, fullAreaInt, ratioPercent))
+                for (int[] quad : filterResultsForOutput(raw, caveFactor)) {
+                    int x = quad[0], z = quad[1], river = quad[2], cave = quad[3];
+                    int score = combinedScore(river, cave, caveFactor);
+                    double ratioPercent = score / RIVER_AREA_FULL * 100.0;
+                    sb.append(String.format("/tp %d 64 %d s=%d/%d = %.2f%%", x, z, score, fullAreaInt, ratioPercent))
                         .append('\n');
                 }
                 if (sb.length() > 0) {
