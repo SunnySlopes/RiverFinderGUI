@@ -2,3 +2,6 @@
 	path = RiverFinderBase
 	url = https://github.com/SunnySlopes/RiverFinder.git
 	branch = JNI
+[submodule "cubiomes"]
+	path = cubiomes
+	url = https://github.com/xpple/cubiomes

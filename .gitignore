@@ -6,9 +6,6 @@ build/
 !**/src/test/**/build/
 .kotlin
 
-# External cubiomes checkout required by RiverFinderBase native build (see RiverFinderBase/README.md)
-/cubiomes/
-
 # Native libs (built by :riverfinder / bundled into jar at build time)
 native/**/*.dll
 native/**/*.so

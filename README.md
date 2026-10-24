@@ -14,6 +14,17 @@ Right-click the `.jar` file, choose **Open with**, and select **Java 17+** to la
 
 右键 `.jar` 文件，选择**打开方式**，并使用 **Java 17 及以上版本**启动程序。
 
+## Build from Source / 从源码构建
+
+This repository uses two Git submodules: `RiverFinderBase` (the native search core) and `cubiomes` (the xpple fork with 26.3 biome tables).
+
+本仓库使用两个 Git 子模块：`RiverFinderBase`（原生搜索核心）和 `cubiomes`（xpple 分支，包含 26.3 群系表）。
+
+```powershell
+git submodule update --init --recursive
+.\gradlew.bat buildMainJar
+```
+
 ## How to Use / 如何使用
 
 The program has two tabs: **Single Seed Search** and **Search from Seed List**.
