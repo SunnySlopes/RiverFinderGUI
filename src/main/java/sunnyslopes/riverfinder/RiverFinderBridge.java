@@ -15,6 +15,12 @@ import java.util.List;
  */
 public final class RiverFinderBridge {
 
+    /**
+     * cubiomes {@code MCVersion.MC_26_3}. This is the generation base used by
+     * the "1.18~26.3+" version option.
+     */
+    public static final int MC_26_3 = 35;
+
     private static boolean loaded = false;
 
     static {
@@ -113,7 +119,18 @@ public final class RiverFinderBridge {
     }
 
     /**
-     * River / cave search at biome sample height {@code y}.
+     * River / cave search with an explicit cubiomes generation base.
+     * @param mc cubiomes MCVersion id, e.g. {@link #MC_26_3}
+     * @param caveFactor cave area weight for ranking score = river + cave * caveFactor
+     * @return [x1, z1, riverArea1, caveArea1, ...] or null
+     */
+    public static native int[] riverSearchEx(long seed, int mc, int startX, int startZ,
+        int width, int height, int y, int minArea, float preserveRange, int numThreads,
+        float caveFactor);
+
+    /**
+     * River / cave search at biome sample height {@code y} using the legacy
+     * 1.21.3 generation base.
      * @param caveFactor cave area weight for ranking score = river + cave * caveFactor
      * @return [x1, z1, riverArea1, caveArea1, ...] or null
      */

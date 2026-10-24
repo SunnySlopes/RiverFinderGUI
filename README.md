@@ -23,11 +23,13 @@ The program has two tabs: **Single Seed Search** and **Search from Seed List**.
 ### Single Seed Search / 单种子搜索
 
 - Enter seed, thread count, minimum river area, minimum river biome ratio, and search range (`MinX/MaxX/MinZ/MaxZ`).
+- The **Version** dropdown currently offers one generation base, **1.18~26.3+**, which uses the 26.3 cubiomes biome tables.
 - Click **Start Search** to begin. You can **Pause**, **Resume**, or **Stop**.
 - Results show coordinate, area, and ratio. You can **Sort** and **Export**.
 - Use **Reset Search Area to Default** to restore default range.
 
 - 输入种子、线程数、最低河流面积、最低河流群系占比和搜索范围（`MinX/MaxX/MinZ/MaxZ`）。
+- **版本**下拉框当前只有一个选项 **1.18~26.3+**，使用 26.3 的 cubiomes 群系表进行计算。
 - 点击**开始搜索**开始任务，可在过程中**暂停**、**继续**或**停止**。
 - 结果显示坐标、面积、占比，可进行**排序**和**导出**。
 - 使用**重置搜索区域为默认值**恢复默认范围。
@@ -61,10 +63,10 @@ The program has two tabs: **Single Seed Search** and **Search from Seed List**.
 ## Core Libraries / 核心依赖
 
 - [RiverFinder (melationin)](https://github.com/melationin/riverfinder) - Base river searching library/reference implementation
-- [cubiomes](https://github.com/Cubitect/cubiomes) - Biome and terrain generation support
+- [cubiomes (xpple fork)](https://github.com/xpple/cubiomes) - Biome and terrain generation support (26.3)
 
 - [RiverFinder (melationin)](https://github.com/melationin/riverfinder) - 基础河流查找库/参考实现
-- [cubiomes](https://github.com/Cubitect/cubiomes) - 群系与地形生成支持
+- [cubiomes (xpple fork)](https://github.com/xpple/cubiomes) - 群系与地形生成支持（26.3）
 
 ## Notes / 注意事项
 

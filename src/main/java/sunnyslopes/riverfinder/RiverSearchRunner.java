@@ -22,8 +22,11 @@ public class RiverSearchRunner {
     /** Used by UI for search area validation. */
     public static final int PHASE1_GRID_STEP = 16;
 
-    /** Full ring area π×(128²−24²) for max river area parameter. */
-    public static final double RIVER_AREA_FULL = Math.PI * (128 * 128 - 24 * 24);
+    /** Exact number of blocks between the two AFK rings (inner radius 24, outer 128). */
+    public static final int RIVER_AREA_BLOCKS = 49_640;
+
+    /** Same block count as a double, for percentage calculations. */
+    public static final double RIVER_AREA_FULL = RIVER_AREA_BLOCKS;
 
     /** Max search area (blocks). */
     public static final long MAX_SEARCH_AREA_BLOCKS = 30_000_000L * 30_000_000L;
@@ -184,11 +187,11 @@ public class RiverSearchRunner {
     }
 
     /** Start river search for one seed. Runs in background thread. */
-    public void startRiverSearch(long seed, int minX, int maxX, int minZ, int maxZ, int minArea,
+    public void startRiverSearch(long seed, int mc, int minX, int maxX, int minZ, int maxZ, int minArea,
                                  int threadCount, int biomeY, float caveFactor,
                                  Consumer<ProgressInfo> progressCallback, Consumer<String> resultCallback) {
         if (isRunning) return;
-        Thread t = new Thread(() -> runRiverSearch(seed, minX, maxX, minZ, maxZ, minArea, threadCount,
+        Thread t = new Thread(() -> runRiverSearch(seed, mc, minX, maxX, minZ, maxZ, minArea, threadCount,
             biomeY, caveFactor, progressCallback, resultCallback),
             "riverfinder-search");
         t.setDaemon(true);
@@ -196,15 +199,15 @@ public class RiverSearchRunner {
     }
 
     /** Run river search for one seed on the current thread (for list search). */
-    public void runRiverSearchBlocking(long seed, int minX, int maxX, int minZ, int maxZ, int minArea,
+    public void runRiverSearchBlocking(long seed, int mc, int minX, int maxX, int minZ, int maxZ, int minArea,
                                        int threadCount, int biomeY, float caveFactor,
                                        Consumer<ProgressInfo> progressCallback, Consumer<String> resultCallback) {
         if (isRunning) return;
-        runRiverSearch(seed, minX, maxX, minZ, maxZ, minArea, threadCount, biomeY, caveFactor,
+        runRiverSearch(seed, mc, minX, maxX, minZ, maxZ, minArea, threadCount, biomeY, caveFactor,
             progressCallback, resultCallback);
     }
 
-    private void runRiverSearch(long seed, int minX, int maxX, int minZ, int maxZ, int minArea,
+    private void runRiverSearch(long seed, int mc, int minX, int maxX, int minZ, int maxZ, int minArea,
                                int threadCount, int biomeY, float caveFactor,
                                Consumer<ProgressInfo> progressCallback, Consumer<String> resultCallback) {
         isRunning = true;
@@ -305,11 +308,11 @@ public class RiverSearchRunner {
         }, 0, PROGRESS_POLL_MS, TimeUnit.MILLISECONDS);
 
         try {
-            int[] raw = RiverFinderBridge.riverSearch(seed, startX, startZ, width, height, biomeY, minArea,
+            int[] raw = RiverFinderBridge.riverSearchEx(seed, mc, startX, startZ, width, height, biomeY, minArea,
                 DEFAULT_PRESERVE_RANGE, threads, caveFactor);
 
             if (raw != null && resultCallback != null) {
-                int fullAreaInt = (int) RIVER_AREA_FULL;
+                int fullAreaInt = RIVER_AREA_BLOCKS;
                 StringBuilder sb = new StringBuilder();
                 for (int[] quad : filterResultsForOutput(raw, caveFactor)) {
                     int x = quad[0], z = quad[1], river = quad[2], cave = quad[3];

@@ -33,17 +33,27 @@ public class RiverFinderFrame extends JFrame {
     private static final int DEFAULT_LIST_MIN_Z = -4096;
     private static final int DEFAULT_LIST_MAX_Z = 4095;
 
-    private static final double RIVER_AREA_FULL = Math.PI * (128 * 128 - 24 * 24);
+    private static final double RIVER_AREA_FULL = RiverSearchRunner.RIVER_AREA_FULL;
     /**
      * 河流群系面积下限：全域总面积的 2/3；上限 95%，占比同范围
      */
-    private static final int MIN_RIVER_AREA_UI = (int) (RIVER_AREA_FULL * 0.50);
-    private static final int DEFAULT_RIVER_AREA_UI = (int) (RIVER_AREA_FULL * 0.70);
-    private static final int MAX_RIVER_AREA_UI = (int) (RIVER_AREA_FULL * 0.95);
+    private static final int MIN_RIVER_AREA_UI = (int) Math.round(RIVER_AREA_FULL * 0.50);
+    private static final int DEFAULT_RIVER_AREA_UI = (int) Math.round(RIVER_AREA_FULL * 0.70);
+    private static final int MAX_RIVER_AREA_UI = (int) Math.round(RIVER_AREA_FULL * 0.95);
     private static final double MIN_RIVER_RATIO_UI = MIN_RIVER_AREA_UI / RIVER_AREA_FULL * 100.0;
     private static final double DEFAULT_RIVER_RATIO_UI = DEFAULT_RIVER_AREA_UI / RIVER_AREA_FULL * 100.0;
     private static final double MAX_RIVER_RATIO_UI = MAX_RIVER_AREA_UI / RIVER_AREA_FULL * 100.0;
     private static final int DEFAULT_BIOME_SAMPLE_Y = -64;
+
+    /** The only generation base currently offered by the GUI. */
+    private static final String VERSION_118_263 = "1.18~26.3+";
+
+    private record VersionOption(String label, int mcVersion) {
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
 
     // 单种子搜索相关组件
     private JLabel searchSeedLabel;
@@ -55,6 +65,7 @@ public class RiverFinderFrame extends JFrame {
     private JLabel searchMinZLabel;
     private JLabel searchMaxZLabel;
     private JLabel searchBiomeYLabel;
+    private JLabel searchVersionLabel;
     private JLabel searchLanguageLabel;
     private JTextField searchSeedField;
     private JTextField searchThreadCountField;
@@ -69,6 +80,7 @@ public class RiverFinderFrame extends JFrame {
     private boolean squareSideUpdating = false;
     private JTextField searchBiomeYField;
     private JCheckBox searchCalcCaveCheckBox;
+    private JComboBox<VersionOption> versionComboBox;
     private JComboBox<String> languageComboBox;
     private boolean searchRiverParamUpdating = false;
     private JButton searchStartButton;
@@ -270,9 +282,26 @@ public class RiverFinderFrame extends JFrame {
         });
         inputPanel.add(searchSeedField, gbc);
 
-        // Thread Count 输入
+        // 版本选择（当前仅一个生成基底：1.18~26.3+，使用 cubiomes MC_26_3）
         gbc.gridx = 0;
         gbc.gridy = 1;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        searchVersionLabel = new JLabel(getString("label.version"));
+        searchVersionLabel.setFont(getLoadedFont());
+        inputPanel.add(searchVersionLabel, gbc);
+        gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        versionComboBox = new JComboBox<>(new VersionOption[] {
+            new VersionOption(VERSION_118_263, RiverFinderBridge.MC_26_3)
+        });
+        versionComboBox.setSelectedIndex(0);
+        inputPanel.add(versionComboBox, gbc);
+
+        // Thread Count 输入
+        gbc.gridx = 0;
+        gbc.gridy = 2;
         gbc.fill = GridBagConstraints.NONE;
         gbc.weightx = 0;
         searchThreadCountLabel = new JLabel(getString("label.threadCount"));
@@ -292,7 +321,7 @@ public class RiverFinderFrame extends JFrame {
 
         // 最低河流面积
         gbc.gridx = 0;
-        gbc.gridy = 2;
+        gbc.gridy = 3;
         gbc.fill = GridBagConstraints.NONE;
         gbc.weightx = 0;
         searchMinRiverAreaLabel = new JLabel(getString("label.minRiverArea"));
@@ -311,7 +340,7 @@ public class RiverFinderFrame extends JFrame {
 
         // 最低河流群系占比
         gbc.gridx = 0;
-        gbc.gridy = 3;
+        gbc.gridy = 4;
         gbc.fill = GridBagConstraints.NONE;
         gbc.weightx = 0;
         searchMinRiverRatioLabel = new JLabel(getString("label.minRiverRatio"));
@@ -330,7 +359,7 @@ public class RiverFinderFrame extends JFrame {
 
         // MinX 输入
         gbc.gridx = 0;
-        gbc.gridy = 4;
+        gbc.gridy = 5;
         gbc.fill = GridBagConstraints.NONE;
         gbc.weightx = 0;
         JLabel minXLabel = new JLabel(getString("label.minX"));
@@ -350,7 +379,7 @@ public class RiverFinderFrame extends JFrame {
 
         // MaxX 输入
         gbc.gridx = 0;
-        gbc.gridy = 5;
+        gbc.gridy = 6;
         gbc.fill = GridBagConstraints.NONE;
         gbc.weightx = 0;
         JLabel maxXLabel = new JLabel(getString("label.maxX"));
@@ -369,7 +398,7 @@ public class RiverFinderFrame extends JFrame {
 
         // MinZ 输入
         gbc.gridx = 0;
-        gbc.gridy = 6;
+        gbc.gridy = 7;
         gbc.fill = GridBagConstraints.NONE;
         gbc.weightx = 0;
         JLabel minZLabel = new JLabel(getString("label.minZ"));
@@ -388,7 +417,7 @@ public class RiverFinderFrame extends JFrame {
 
         // MaxZ 输入
         gbc.gridx = 0;
-        gbc.gridy = 7;
+        gbc.gridy = 8;
         gbc.fill = GridBagConstraints.NONE;
         gbc.weightx = 0;
         JLabel maxZLabel = new JLabel(getString("label.maxZ"));
@@ -407,7 +436,7 @@ public class RiverFinderFrame extends JFrame {
 
         // 正方形区域边长（勾选后按中心 0,0 填入 min/max）
         gbc.gridx = 0;
-        gbc.gridy = 8;
+        gbc.gridy = 9;
         gbc.fill = GridBagConstraints.NONE;
         gbc.weightx = 0;
         squareSideCheckBox = new JCheckBox(getString("label.squareSide"));
@@ -444,7 +473,7 @@ public class RiverFinderFrame extends JFrame {
 
         // 群系取样高度
         gbc.gridx = 0;
-        gbc.gridy = 9;
+        gbc.gridy = 10;
         gbc.fill = GridBagConstraints.NONE;
         gbc.weightx = 0;
         searchBiomeYLabel = new JLabel(getString("label.biomeSampleY"));
@@ -463,7 +492,7 @@ public class RiverFinderFrame extends JFrame {
 
         // 是否计算溶洞面积
         gbc.gridx = 0;
-        gbc.gridy = 10;
+        gbc.gridy = 11;
         gbc.fill = GridBagConstraints.NONE;
         gbc.weightx = 0;
         gbc.gridwidth = 2;
@@ -474,7 +503,7 @@ public class RiverFinderFrame extends JFrame {
 
         // 语言选择下拉框
         gbc.gridx = 0;
-        gbc.gridy = 11;
+        gbc.gridy = 12;
         gbc.fill = GridBagConstraints.NONE;
         gbc.weightx = 0;
         searchLanguageLabel = new JLabel(getString("label.language"));
@@ -837,7 +866,7 @@ public class RiverFinderFrame extends JFrame {
     // 排序搜索结果（按面积从大到小，格式为 x z area ratio%）
 
     /**
-     * 从结果行解析面积，格式 /tp x 64 z s=area/49662 = pct%
+     * 从结果行解析面积，格式 /tp x 64 z s=area/49640 = pct%
      */
     private int parseAreaFromResultLine(String line) {
         int sIdx = line.indexOf("s=");
@@ -879,6 +908,13 @@ public class RiverFinderFrame extends JFrame {
     }
 
     // 搜索相关方法（河流多阶段搜索）
+    private int selectedMcVersion() {
+        Object selected = versionComboBox == null ? null : versionComboBox.getSelectedItem();
+        return selected instanceof VersionOption option
+            ? option.mcVersion()
+            : RiverFinderBridge.MC_26_3;
+    }
+
     private void startSearch() {
         if (isSearchRunning && isSearchPaused) {
             if (riverRunner != null) {
@@ -1082,6 +1118,7 @@ public class RiverFinderFrame extends JFrame {
                 return;
             }
             float caveFactor = searchCalcCaveCheckBox.isSelected() ? 1.0f : 0.0f;
+            int mcVersion = selectedMcVersion();
 
             lastSearchSeed = seed;
             lastSearchMinX = minX;
@@ -1105,6 +1142,7 @@ public class RiverFinderFrame extends JFrame {
             applyBoundFieldEnableState(false);
             if (searchBiomeYField != null) searchBiomeYField.setEnabled(false);
             if (searchCalcCaveCheckBox != null) searchCalcCaveCheckBox.setEnabled(false);
+            if (versionComboBox != null) versionComboBox.setEnabled(false);
             if (languageComboBox != null) languageComboBox.setEnabled(false);
             final long resultToken = singleSearchResultToken.incrementAndGet();
             searchResultArea.setText("");
@@ -1115,7 +1153,7 @@ public class RiverFinderFrame extends JFrame {
             searchRemainingTimeLabel.setText(getString("remainingTime.calculating"));
 
             riverRunner = new RiverSearchRunner();
-            riverRunner.startRiverSearch(seed, minX, maxX, minZ, maxZ, minArea, threadCount, biomeY, caveFactor,
+            riverRunner.startRiverSearch(seed, mcVersion, minX, maxX, minZ, maxZ, minArea, threadCount, biomeY, caveFactor,
                 info -> updateRiverSearchProgress(resultToken, info),
                 line -> addSearchResult(resultToken, line));
 
@@ -1720,6 +1758,7 @@ public class RiverFinderFrame extends JFrame {
         applyBoundFieldEnableState(true);
         if (searchBiomeYField != null) searchBiomeYField.setEnabled(true);
         if (searchCalcCaveCheckBox != null) searchCalcCaveCheckBox.setEnabled(true);
+        if (versionComboBox != null) versionComboBox.setEnabled(true);
         if (languageComboBox != null) languageComboBox.setEnabled(true);
     }
 
@@ -1973,6 +2012,9 @@ public class RiverFinderFrame extends JFrame {
         }
         if (searchCalcCaveCheckBox != null) {
             searchCalcCaveCheckBox.setText(getString("label.calcCaveArea"));
+        }
+        if (searchVersionLabel != null) {
+            searchVersionLabel.setText(getString("label.version"));
         }
         if (searchLanguageLabel != null) {
             searchLanguageLabel.setText(getString("label.language"));
@@ -2244,6 +2286,7 @@ public class RiverFinderFrame extends JFrame {
                 applyListBoundFieldEnableState(true);
                 if (listBiomeYField != null) listBiomeYField.setEnabled(true);
                 if (listCalcCaveCheckBox != null) listCalcCaveCheckBox.setEnabled(true);
+                if (versionComboBox != null) versionComboBox.setEnabled(true);
                 listSearchResultToken.incrementAndGet();
                 listSearchResultArea.setText("");
                 listSearchProgressBar.setValue(0);
@@ -2478,6 +2521,7 @@ public class RiverFinderFrame extends JFrame {
             }
             final float caveFactor = listCalcCaveCheckBox.isSelected() ? 1.0f : 0.0f;
             final int finalBiomeY = biomeY;
+            final int mcVersion = selectedMcVersion();
 
             lastListSearchMinX = minX;
             lastListSearchMaxX = maxX;
@@ -2500,6 +2544,7 @@ public class RiverFinderFrame extends JFrame {
             applyListBoundFieldEnableState(false);
             if (listBiomeYField != null) listBiomeYField.setEnabled(false);
             if (listCalcCaveCheckBox != null) listCalcCaveCheckBox.setEnabled(false);
+            if (versionComboBox != null) versionComboBox.setEnabled(false);
             final long listResultToken = listSearchResultToken.incrementAndGet();
             listSearchResultArea.setText("");
             listSearchProgressBar.setMaximum((int) seeds.size());
@@ -2637,7 +2682,7 @@ public class RiverFinderFrame extends JFrame {
                         });
                     };
 
-                    listRiverRunner.runRiverSearchBlocking(seed, minX, maxX, minZ, maxZ, finalMinArea, finalThreadCount,
+                    listRiverRunner.runRiverSearchBlocking(seed, mcVersion, minX, maxX, minZ, maxZ, finalMinArea, finalThreadCount,
                         finalBiomeY, caveFactor, seedProgressCallback, seedResultCallback);
 
                     while (listRiverRunner.isRunning() && isListSearchRunning) {
@@ -2720,6 +2765,7 @@ public class RiverFinderFrame extends JFrame {
                     applyListBoundFieldEnableState(true);
                     if (listBiomeYField != null) listBiomeYField.setEnabled(true);
                     if (listCalcCaveCheckBox != null) listCalcCaveCheckBox.setEnabled(true);
+                    if (versionComboBox != null) versionComboBox.setEnabled(true);
                     listSearchProgressBar.setValue((int) totalSeeds);
                     listSearchProgressBar.setString(getString("progress.seedsDone", totalSeeds, totalSeeds));
                     listSearchCurrentSeedProgressLabel.setText(getString("currentSeed.complete"));
@@ -2766,6 +2812,7 @@ public class RiverFinderFrame extends JFrame {
         applyListBoundFieldEnableState(true);
         if (listBiomeYField != null) listBiomeYField.setEnabled(true);
         if (listCalcCaveCheckBox != null) listCalcCaveCheckBox.setEnabled(true);
+        if (versionComboBox != null) versionComboBox.setEnabled(true);
     }
 
     private void resetListSearchToDefaults() {

@@ -7,7 +7,7 @@ plugins {
     id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 group 'org.example'
-version '1.1.0'
+version '1.1.1'
 repositories {
     mavenCentral()
     gradlePluginPortal()
@@ -47,18 +47,20 @@ shadowJar {
 }
 
 def generatedNativeResourcesDir = layout.buildDirectory.dir('generated/native-resources')
+def nativeOutputDir = project(':riverfinder').layout.buildDirectory.dir('native')
 
 tasks.register('prepareNativeResources') {
     group = 'build'
     description = 'Builds :riverfinder (RiverFinderBase submodule) and packs Windows dll into jar resources'
     dependsOn ':riverfinder:copyNativeArtifacts'
+    inputs.files(nativeOutputDir).optional()
     outputs.dir(generatedNativeResourcesDir)
     doLast {
         def outDir = generatedNativeResourcesDir.get().asFile
         delete(outDir)
         outDir.mkdirs()
 
-        def nativeDir = project(':riverfinder').layout.buildDirectory.dir('native').get().asFile
+        def nativeDir = nativeOutputDir.get().asFile
         if (!nativeDir.exists()) {
             logger.warn('No native artifacts from :riverfinder; jar will not contain bundled natives.')
             return
