@@ -8,6 +8,17 @@ plugins {
 }
 group 'org.example'
 version '1.1.1'
+
+/*
+ * Native contract with the RiverFinderBase submodule (JNI branch):
+ *   - :riverfinder:copyNativeArtifacts -> build/native/libriverFinderLibJ.dll
+ *   - :riverfinder:copyCliArtifact     -> build/cli/riverfinder-cli.exe
+ *   - copyCliToJni                     -> RiverFinderBase/jni/riverfinder-cli.exe
+ *   - cubiomes is a nested submodule of RiverFinderBase; the main module never
+ *     compiles or checks out its own cubiomes copy.
+ * The Java side only depends on the DLL and the RiverFinderBridge signatures.
+ */
+
 repositories {
     mavenCentral()
     gradlePluginPortal()
@@ -23,7 +34,7 @@ repositories {
     maven { url "https://repo.jellejurre.dev" }
 }
 dependencies {
-    // Native artifacts produced by :riverfinder CMake build
+    // Native artifacts are produced by the :riverfinder subproject.
 }
 
 java {
@@ -48,10 +59,48 @@ shadowJar {
 
 def generatedNativeResourcesDir = layout.buildDirectory.dir('generated/native-resources')
 def nativeOutputDir = project(':riverfinder').layout.buildDirectory.dir('native')
+def riverBaseCliExe = file('RiverFinderBase/build/cli/riverfinder-cli.exe')
+def riverBaseJniDir = file('RiverFinderBase/jni')
+
+/*
+ * Fails fast when the submodule is not connected. Building the main JAR or
+ * the standalone CLI without RiverFinderBase/cubiomes would otherwise fail
+ * later inside MSYS2 with a much less obvious message.
+ */
+def checkRiverBaseSubmodule = tasks.register('checkRiverBaseSubmodule') {
+    group = 'verification'
+    description = 'Verifies RiverFinderBase and its nested cubiomes submodule are initialized'
+    doLast {
+        def required = [
+            'RiverFinderBase/build.gradle',
+            'RiverFinderBase/river_finder.cpp',
+            'RiverFinderBase/riverFinderLib.cpp',
+            'RiverFinderBase/build_jni_msys2.ps1',
+            'RiverFinderBase/build_cli_msys2.ps1',
+            'RiverFinderBase/.gitmodules',
+            'RiverFinderBase/cubiomes/generator.c'
+        ]
+        def missing = required.findAll { !file(it).exists() }
+        if (!missing.isEmpty()) {
+            throw new GradleException(
+                'RiverFinderBase submodule is not initialized correctly. Missing: '
+                    + missing.join(', ')
+                    + '. Run: git submodule update --init --recursive')
+        }
+
+        def baseModules = file('RiverFinderBase/.gitmodules')
+        if (!baseModules.text.contains('cubiomes')) {
+            throw new GradleException(
+                'RiverFinderBase/.gitmodules does not declare the nested cubiomes submodule. '
+                    + 'Update RiverFinderBase to the JNI branch that embeds cubiomes.')
+        }
+    }
+}
 
 tasks.register('prepareNativeResources') {
     group = 'build'
     description = 'Builds :riverfinder (RiverFinderBase submodule) and packs Windows dll into jar resources'
+    dependsOn checkRiverBaseSubmodule
     dependsOn ':riverfinder:copyNativeArtifacts'
     inputs.files(nativeOutputDir).optional()
     outputs.dir(generatedNativeResourcesDir)
@@ -87,6 +136,7 @@ tasks.register('buildMainJar', ShadowJar) {
     dependsOn prepareNativeResources
     archiveBaseName.set('RiverFinder')
     archiveClassifier.set('')
+    destinationDirectory.set(layout.buildDirectory.dir('libs'))
     from sourceSets.main.output
     configurations = [project.configurations.runtimeClasspath]
     manifest {
@@ -110,10 +160,42 @@ tasks.register('buildAllJars') {
 
 tasks.register('buildNative') {
     group = 'build'
-    description = 'Builds riverfinder native library via subproject'
+    description = 'Builds the riverfinder JNI DLL via the RiverFinderBase subproject'
+    dependsOn checkRiverBaseSubmodule
     dependsOn ':riverfinder:copyNativeArtifacts'
+}
+
+tasks.register('buildNativeCli') {
+    group = 'build'
+    description = 'Builds the standalone riverfinder-cli.exe via the RiverFinderBase subproject'
+    dependsOn checkRiverBaseSubmodule
+    dependsOn ':riverfinder:copyCliArtifact'
+}
+
+/*
+ * The build directory keeps the main fat JAR in build/libs. The standalone
+ * CLI is a native artifact of RiverFinderBase, so it is copied into the
+ * submodule's jni/ directory instead of being bundled into an archive.
+ */
+tasks.register('copyCliToJni') {
+    group = 'build'
+    description = 'Copies the standalone CLI into RiverFinderBase/jni/'
+    dependsOn buildNativeCli
+    doLast {
+        if (!riverBaseCliExe.exists()) {
+            throw new GradleException(
+                "Standalone CLI missing after build: ${riverBaseCliExe}. "
+                    + 'Expected :riverfinder:copyCliArtifact to produce it.')
+        }
+        riverBaseJniDir.mkdirs()
+        copy {
+            from(riverBaseCliExe)
+            into(riverBaseJniDir)
+        }
+    }
 }
 
 tasks.named('build') {
     dependsOn buildMainJar
+    dependsOn copyCliToJni
 }

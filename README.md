@@ -16,14 +16,36 @@ Right-click the `.jar` file, choose **Open with**, and select **Java 17+** to la
 
 ## Build from Source / 从源码构建
 
-This repository uses two Git submodules: `RiverFinderBase` (the native search core) and `cubiomes` (the xpple fork with 26.3 biome tables).
+This repository uses one Git submodule: `RiverFinderBase` (the native search core). Its `cubiomes` dependency is a nested submodule of `RiverFinderBase`, so the native core is self-contained.
 
-本仓库使用两个 Git 子模块：`RiverFinderBase`（原生搜索核心）和 `cubiomes`（xpple 分支，包含 26.3 群系表）。
+本仓库使用一个 Git 子模块：`RiverFinderBase`（原生搜索核心）。它的 `cubiomes` 依赖是 `RiverFinderBase` 内部的嵌套子模块，因此原生核心可以独立构建。
 
 ```powershell
 git submodule update --init --recursive
-.\gradlew.bat buildMainJar
+.\gradlew.bat build
 ```
+
+`build` produces the main fat JAR in `build/libs` and places the standalone CLI into `RiverFinderBase/jni`:
+
+`build` 会把主 fat JAR 放到 `build/libs`，并把独立 CLI 放到 `RiverFinderBase/jni`：
+
+```text
+build\libs\RiverFinder-<version>.jar
+RiverFinderBase\jni\riverfinder-cli.exe
+```
+
+The native core can also be built as a standalone C++ CLI (no JNI DLL needed):
+
+原生核心也可以单独构建成 C++ 命令行程序（不需要 JNI DLL）：
+
+```powershell
+.\gradlew.bat copyCliToJni
+.\RiverFinderBase\jni\riverfinder-cli.exe --help
+```
+
+See [RiverFinderBase/README.md](RiverFinderBase/README.md) for the full CLI options and output format.
+
+完整命令行参数和输出格式见 [RiverFinderBase/README.md](RiverFinderBase/README.md)。
 
 ## How to Use / 如何使用
 
@@ -74,17 +96,19 @@ The program has two tabs: **Single Seed Search** and **Search from Seed List**.
 ## Core Libraries / 核心依赖
 
 - [RiverFinder (melationin)](https://github.com/melationin/riverfinder) - Base river searching library/reference implementation
-- [cubiomes (xpple fork)](https://github.com/xpple/cubiomes) - Biome and terrain generation support (26.3)
+- [cubiomes (xpple fork)](https://github.com/xpple/cubiomes) - Biome and terrain generation support (26.3), included as a nested submodule of `RiverFinderBase`
 
 - [RiverFinder (melationin)](https://github.com/melationin/riverfinder) - 基础河流查找库/参考实现
-- [cubiomes (xpple fork)](https://github.com/xpple/cubiomes) - 群系与地形生成支持（26.3）
+- [cubiomes (xpple fork)](https://github.com/xpple/cubiomes) - 群系与地形生成支持（26.3），作为 `RiverFinderBase` 的嵌套子模块引入
 
 ## Notes / 注意事项
 
 - Use a thread count that matches your CPU capability for best stability.
 - Native libraries (`dll`/`so`) are packaged in the jar and extracted to a temporary directory at runtime.
+- The standalone CLI is statically linked in the MSYS2 build and does not need the JNI DLL.
 - 建议根据 CPU 性能设置线程数以获得更稳定的体验。
 - 原生库（`dll`/`so`）已打包进 jar，运行时会自动解压到临时目录加载。
+- MSYS2 构建出的独立 CLI 已静态链接，不依赖 JNI DLL。
 
 ---
 
